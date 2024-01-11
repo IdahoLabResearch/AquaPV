@@ -15,12 +15,16 @@ import plotly.express as px
 import plotly.figure_factory as ff
 
 
-def import_hydro_data(file):
+def import_hydro_data(file: object) -> pd.DataFrame:
     """
     Hydro generation data file import from csv to pandas dataframe.
     Needs to be a years worth of data and starting on Jan 1st.
-    @param file: csv file with two columns [datetime, generation (MW)]
-    @return: pandas Dataframe
+
+    Args:
+        file (object): csv file with two columns [datetime, generation (MW)]
+
+    Returns:
+        dataframe: dataframe with datetime and generation columns
     """
 
     # Try to read the file

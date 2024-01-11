@@ -1,4 +1,4 @@
-.. _settingup:
+.. _beforeyoubegin:
 
 Setting up AquaPV
 =================
@@ -15,6 +15,13 @@ Importing the AquaPV module
 
 Using the path to the AquaPV module:
  1. from AquaPV import AquaPV as apv
+
   * Recommended
   * Creating and AquaPV object apv.AquaPV()
+
  2. from AquaPV import *
+
+.. figure:: _static/Summary-ITC-and-PTC-Values-Chart-2023.png
+   :alt: Tag if missing
+
+   *Caption here*

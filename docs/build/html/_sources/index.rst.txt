@@ -1,15 +1,21 @@
-.. AquaPV documentation master file, created by
-   sphinx-quickstart on Tue Jan  9 12:50:12 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to AquaPV's documentation!
 ==================================
 
+Welcome to the users guide to AquaPV
+
+This will link to file :ref:'this will be the link <beforeyoubegin>' and
+following text
+
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
+   beforeyoubegin
+
+.. toctree::
+   :maxdepth: 2
+   :caption: AquaPV Object
+
+   modules
 
 
 Indices and tables
