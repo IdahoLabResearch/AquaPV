@@ -15,40 +15,6 @@ import plotly.express as px
 import plotly.figure_factory as ff
 
 
-def import_hydro_data(file: object) -> pd.DataFrame:
-    """
-    Hydro generation data file import from csv to pandas dataframe.
-    Needs to be a years worth of data and starting on Jan 1st.
-
-    Args:
-        file (object): csv file with two columns [datetime, generation (MW)]
-
-    Returns:
-        dataframe: dataframe with datetime and generation columns
-    """
-
-    # Try to read the file
-    try:
-        df = pd.read_csv(file)
-
-        # Rename the columns for future use and format datetime as index
-        df.columns = ["Date", "Hydro Gen (MW)"]
-        df["Date"] = pd.to_datetime(df["Date"], infer_datetime_format=True)
-        df.set_index("Date", inplace=True)
-
-        # Resample to 1 hour timesteps
-        df = df.resample("60T").mean()
-
-        # Remove any local datetime attached
-        df.index = df.index.tz_localize(None)
-
-    except Exception as e:
-        print(f"Could not read data/ {file} \n{e}")
-        return None
-
-    return df
-
-
 def import_solar_data(file):
     """
     Solar generation data file import from csv to pandas dataframe.
@@ -62,18 +28,18 @@ def import_solar_data(file):
         df = pd.read_csv(file)
 
         # Rename the columns for future use and format datetime as index
-        df.columns = ["Date", "Solar Gen (MW)"]
-        df["Date"] = pd.to_datetime(df["Date"], infer_datetime_format=True)
+        df.columns = ["Date", "Solar Generation (MW)"]
+        df["Date"] = pd.to_datetime(df["Date"])#, infer_datetime_format=True)
         df.set_index("Date", inplace=True)
 
         # Resample to 1 hour timesteps
-        df = df.resample("60T").mean()
+        df = df.resample("60min").mean()
 
         # Remove any local datetime attached
         df.index = df.index.tz_localize(None)
 
     except Exception as e:
-        print(f"Could not read data/ {file} \n{e}")
+        print(f"Could not read data from: {file} \n{e}")
         return None
 
     return df
@@ -93,20 +59,21 @@ def import_price_data(file):
 
         # Rename the columns for future use and format datetime as index
         df.columns = ["Date", "Price ($/MW)"]
-        df["Date"] = pd.to_datetime(df["Date"], infer_datetime_format=True)
+        df["Date"] = pd.to_datetime(df["Date"])#, infer_datetime_format=True)
         df.set_index("Date", inplace=True)
 
         # Resample to 1 hour timesteps
-        df = df.resample("60T").mean()
+        df = df.resample("60min").mean()
 
         # Remove any local datetime attached
         df.index = df.index.tz_localize(None)
+
+        return df
 
     except Exception as e:
         print(f"Could not read data/ {file} \n{e}")
         return None
 
-    return df
 
 
 class AquaPV(object):
@@ -117,72 +84,40 @@ class AquaPV(object):
 
     def __init__(self,
                  name: str = "Project Name",
-                 hydro_file: str = None,
                  solar_file: str = None,
                  price_file: str = None,
-                 pv_size_MW: float = 1.0,
-                 capex_low: float = 1_120_000,
-                 capex_baseline: float = 1_180_000,
-                 capex_high: float = 1_270_000,
-                 opex_low: float = 7_505,
-                 opex_baseline: float = 7_900,
-                 opex_high: float = 8_295,
-                 incentive_ITC_percent: float = 30,
-                 incentive_PTC_cents_per_kWh: float = 2.75,
-                 PTC_num_years: float = 10,
-                 annual_discount_rate: float = 0.05,
+                 CAPEX_estimate: float = 1_000_000,
+                 CAPEX_CI_percent: float = 5,
+                 OPEX_estimate: float = 1_000,
+                 OPEX_CI_percent: float = 5,
+                 ITC_percent: float = 30,
+                 PTC_cents_per_kWh: float = 2.75,
+                 PTC_number_years: float = 10,
+                 annual_discount_rate: float = 5,
                  life_expectancy: float = 30,
                  ):
-        """
-        Constructor for the AquaPV object
-        @param name: Name of installation
-        @param hydro_file: Hydro generation csv file
-        @param solar_file: Solar generation csv file
-        @param price_file: Electricity price csv file
-        @param pv_size_MW: Size of solar PV installation
-        @param capex_low: Lower estimate of solar installation [$/MW]
-        @param capex_baseline: Estimate of solar installation [$/MW]
-        @param capex_high: Upper estimate of solar installation [$/MW]
-        @param opex_low: Lower estimate of solar yearly cost [$*MW/yr]
-        @param opex_baseline: Estimate of solar yearly cost [$*MW/yr]
-        @param opex_high: High estimate of solar yearly cost [$*MW/yr]
-        @param incentive_ITC_percent: Investment Tax Credit % (0-100)
-        @param incentive_PTC_cents_per_kWh: Production Tax Credit [cents/kWh]
-        @param PTC_num_years: Number of years for PTC
-        @param annual_discount_rate: Annual discount rate (0-1)
-        @param life_expectancy: Number of years solar PV in operation
-        """
 
         # Initialize the object attributes
         self.name = name
-        self.pv_size_MW = pv_size_MW
 
-        self.capex_high = capex_high
-        self.capex_baseline = capex_baseline
-        self.capex_low = capex_low
+        self.CAPEX_baseline = CAPEX_estimate
+        self.CAPEX_high = CAPEX_estimate * (1 + (CAPEX_CI_percent / 100))
+        self.CAPEX_low = CAPEX_estimate * (1 - (CAPEX_CI_percent / 100))
+        
+        self.OPEX_baseline = OPEX_estimate
+        self.OPEX_high = OPEX_estimate * (1 + (OPEX_CI_percent / 100))
+        self.OPEX_low = OPEX_estimate * (1 - (OPEX_CI_percent / 100))
+        
+        self.ITC_percent = ITC_percent
+        self.PTC_cents_per_kWh = PTC_cents_per_kWh
+        self.PTC_number_years = PTC_number_years
 
-        self.opex_high = opex_high
-        self.opex_baseline = opex_baseline
-        self.opex_low = opex_low
-
-        self.incentive_ITC_percent = incentive_ITC_percent
-        self.incentive_PTC_cents_per_kWh = incentive_PTC_cents_per_kWh
-        self.PTC_num_years = PTC_num_years
-
-        self.annual_discount_rate = annual_discount_rate
+        self.annual_discount_rate = annual_discount_rate / 100
         self.life_expectancy = life_expectancy
 
         # self.data is the main dataframe with hydro, solar, and price data over the life_expectancy
-        # This dataframe can only be constructed after the hydro, solar, and price have been input
+        # This dataframe can only be constructed after the solar and price have been input
         self.data = None
-
-        # Setting the hydro if file is given in initialization
-        if hydro_file is not None:
-            self.hydro = import_hydro_data(hydro_file)
-            self.hydro_file = hydro_file
-        else:
-            self.hydro = None
-            self.hydro_file = None
 
         # Setting the solar if file is given in initialization
         if solar_file is not None:
@@ -200,206 +135,181 @@ class AquaPV(object):
             self.price = None
             self.price_file = None
 
-        # if hydro, solar, and price are given we can construct the main dataframe
-        if hydro_file is not None and solar_file is not None and price_file is not None:
+        # if solar and price are given we can construct the main dataframe
+        if solar_file is not None and price_file is not None:
             self.data = self.get_AquaPV_dataframe()
+
 
     def get_AquaPV_dataframe(self):
         """
-        This is the main method that merges the input hydro, solar, and price data into a single DataFrame
+        This is the main method that merges the input solar and price data into a single DataFrame
 
         @return: pandas Dataframe
         """
-        hydro = self.hydro.copy()
-        solar = self.solar.copy()
-        price = self.price.copy()
 
-        # Let's drop the leap day, so we can merge data regardless of year
-        hydro = hydro[~((hydro.index.month == 2) & (hydro.index.day == 29))]
-        solar = solar[~((solar.index.month == 2) & (solar.index.day == 29))]
-        price = price[~((price.index.month == 2) & (price.index.day == 29))]
+        # Try to import the data, if not return string
+        try:
+            solar = self.solar.copy()
+            price = self.price.copy()
 
-        def get_index_year_info(df):
-            start_year = df.index[0].year
-            end_year = df.index[-1].year
-            num_years = len(df.index.year.unique())
-            return start_year, end_year, num_years
+            # Let's drop the leap day, so we can merge the data regardless of year
+            solar = solar[~((solar.index.month == 2) & (solar.index.day == 29))]
+            price = price[~((price.index.month == 2) & (price.index.day == 29))]
 
-        def get_index_day_info(df):
-            start_day = df.index[0].dayofyear
-            end_day = df.index[-1].dayofyear
-            return start_day, end_day
+            def get_index_year_info(df):
+                start_year = df.index[0].year
+                end_year = df.index[-1].year
+                num_years = len(df.index.year.unique())
+                return start_year, end_year, num_years
 
-        # Get needed info about the dataframes
-        hydro_start_year, hydro_end_year, hydro_num_years = get_index_year_info(hydro)
-        hydro_start_day, hydro_end_day = get_index_day_info(hydro)
-        hydro_num_hours = len(hydro.index)
+            def get_index_day_info(df):
+                start_day = df.index[0].dayofyear
+                end_day = df.index[-1].dayofyear
+                return start_day, end_day
+            
 
-        solar_start_year, solar_end_year, solar_num_years = get_index_year_info(solar)
-        solar_start_day, solar_end_day = get_index_day_info(solar)
-        solar_num_hours = len(solar.index)
-
-        price_start_year, price_end_year, price_num_years = get_index_year_info(price)
-        price_start_day, price_end_day = get_index_day_info(price)
-        price_num_hours = len(solar.index)
-
-        # If data starts on Dec 31st, delete that day and start on Jan 1st
-        if hydro_start_day == 365:
-            hydro = hydro[~((hydro.index.year == hydro_start_year) & (hydro.index.day == 365))]
-            hydro_start_year, hydro_end_year, hydro_num_years = get_index_year_info(hydro)
-            hydro_start_day, hydro_end_day = get_index_day_info(hydro)
-            hydro_num_hours = len(hydro.index)
-
-        if solar_start_day == 365:
-            solar = solar[~((solar.index.year == solar_start_year) & (solar.index.day == 365))]
             solar_start_year, solar_end_year, solar_num_years = get_index_year_info(solar)
             solar_start_day, solar_end_day = get_index_day_info(solar)
             solar_num_hours = len(solar.index)
 
-        if price_start_day == 365:
-            price = price[~((price.index.year == price_start_year) & (price.index.day == 365))]
             price_start_year, price_end_year, price_num_years = get_index_year_info(price)
             price_start_day, price_end_day = get_index_day_info(price)
-            price_num_hours = len(price.index)
+            price_num_hours = len(solar.index)
 
-        # If they all start on day 1 of the year
-        if hydro_start_day == 1 and solar_start_day == 1 and price_start_day == 1:
-
-            # Let's align the years
-            start_year = max([hydro_start_year, solar_start_year, price_start_year])
-
-            hydro.index = hydro.index + pd.DateOffset(years=(start_year - hydro_start_year))
-            solar.index = solar.index + pd.DateOffset(years=(start_year - solar_start_year))
-            price.index = price.index + pd.DateOffset(years=(start_year - price_start_year))
-
-            hydro_start_year, hydro_end_year, hydro_num_years = get_index_year_info(hydro)
-            solar_start_year, solar_end_year, solar_num_years = get_index_year_info(solar)
-            price_start_year, price_end_year, price_num_years = get_index_year_info(price)
-
-            # First make sure we have at least 98% of a years worth of data
-            # This won't check if there is more than one  year of data correct
-            must_have_data_percent = 0.98
-            if hydro_num_hours < must_have_data_percent * 8760:
-                print("Too much hydro generation missing data")
-                return None
-
-            if solar_num_hours < must_have_data_percent * 8760:
-                print("Too much solar generation missing data")
-                return None
-
-            if price_num_hours < must_have_data_percent * 8760:
-                print("Too much price missing data")
-                return None
-
-            # If we have under a year, lets fill in the few missing points
-            if hydro_num_hours < 8760:
-                date_index = pd.date_range(start=f"1/1/{start_year}", end=f"12/31/{start_year} 23:00", freq="H")
-                hydro = hydro.reindex(date_index)
-                hydro.fillna(hydro.mean(), inplace=True)
-
-            if solar_num_hours < 8760:
-                date_index = pd.date_range(start=f"1/1/{start_year}", end=f"12/31/{start_year} 23:00", freq="H")
-                solar = solar.reindex(date_index)
-                solar.fillna(0, inplace=True)
-
-            if price_num_hours < 8760:
-                date_index = pd.date_range(start=f"1/1/{start_year}", end=f"12/31/{start_year} 23:00", freq="H")
-                price = price.reindex(date_index)
-                price.fillna(price.mean(), inplace=True)
-
-            # Now they should be at least a years worth of data
-            # Trim them down to fill exactly year(s) worth of data so we can duplicate them
-            # If the last day is not 365, we will remove the last partial year of data
-            if hydro_end_day != 365:
-                hydro = hydro[~(hydro.index.year == hydro_end_year)]
-                hydro_start_year, hydro_end_year, hydro_num_years = get_index_year_info(hydro)
-
-            if solar_end_day != 365:
-                solar = solar[~(solar.index.year == solar_end_year)]
+            # If data starts on Dec 31st, delete that day and start on Jan 1st
+            if solar_start_day == 365:
+                solar = solar[~((solar.index.year == solar_start_year) & (solar.index.day == 365))]
                 solar_start_year, solar_end_year, solar_num_years = get_index_year_info(solar)
+                solar_start_day, solar_end_day = get_index_day_info(solar)
+                solar_num_hours = len(solar.index)
 
-            if price_end_day != 365:
-                price = price[~(price.index.year == price_end_year)]
+            if price_start_day == 365:
+                price = price[~((price.index.year == price_start_year) & (price.index.day == 365))]
+                price_start_year, price_end_year, price_num_years = get_index_year_info(price)
+                price_start_day, price_end_day = get_index_day_info(price)
+                price_num_hours = len(price.index)
+
+            
+            # If they all start on day 1 of the year
+            if solar_start_day == 1 and price_start_day == 1:
+
+                # Let's align the years
+                start_year = max([solar_start_year, price_start_year])
+
+                solar.index = solar.index + pd.DateOffset(years=(start_year - solar_start_year))
+                price.index = price.index + pd.DateOffset(years=(start_year - price_start_year))
+
+                solar_start_year, solar_end_year, solar_num_years = get_index_year_info(solar)
                 price_start_year, price_end_year, price_num_years = get_index_year_info(price)
 
-            # Now they should all start at same year and be a "perfect" year(s) worth of data
-            # Let's make all of them the same number of years
-            max_years = max([self.life_expectancy, hydro_num_years, solar_num_years, price_num_years])
 
-            if hydro_num_years < max_years:
+                #######################################################################################
+                # None of this works because we fill in missing data on the import, move it there later
+                #######################################################################################
+                # # First make sure we have at least 98% of a years worth of data
+                # # This won't check if there is more than one year of data correct
+                # must_have_data_percent = 0.98
+                # if solar_num_hours < must_have_data_percent * 8760:
+                #     print("Too much solar generation missing data")
+                #     return None
 
-                copy = hydro.copy()
-                # Let's add append to the end as long as its not long enough
-                while len(hydro.index.year.unique()) < max_years:
-                    copy_first_year = copy.index[0].year
-                    old_last_year = hydro.index[-1].year
-                    temp = copy.copy()
-                    add_years = old_last_year - copy_first_year + 1
-                    temp.index = temp.index + pd.DateOffset(years=add_years)
-                    hydro = pd.concat([hydro, temp])
+                # if price_num_hours < must_have_data_percent * 8760:
+                #     print("Too much price missing data")
+                #     return None
 
-            if solar_num_years < max_years:
 
-                copy = solar.copy()
-                # Let's add append to the end as long as its not long enough
-                while len(solar.index.year.unique()) < max_years:
-                    copy_first_year = copy.index[0].year
-                    old_last_year = solar.index[-1].year
-                    temp = copy.copy()
-                    add_years = old_last_year - copy_first_year + 1
-                    temp.index = temp.index + pd.DateOffset(years=add_years)
-                    solar = pd.concat([solar, temp])
+                # If we have under a year, lets fill in the few missing points
+                if solar_num_hours < 8760:
+                    date_index = pd.date_range(start=f"1/1/{start_year}", end=f"12/31/{start_year} 23:00", freq="H")
+                    solar = solar.reindex(date_index)
+                    solar.fillna(0, inplace=True)
 
-            if price_num_years < max_years:
+                if price_num_hours < 8760:
+                    date_index = pd.date_range(start=f"1/1/{start_year}", end=f"12/31/{start_year} 23:00", freq="H")
+                    price = price.reindex(date_index)
+                    price.fillna(price.mean(), inplace=True)
+                
+                # Now they should be at least a years worth of data
+                # Trim them down to fill exactly year(s) worth of data so we can duplicate them
+                # If the last day is not 365, we will remove the last partial year of data
+                if solar_end_day < 365:
+                    solar = solar[~(solar.index.year == solar_end_year)]
+                    solar_start_year, solar_end_year, solar_num_years = get_index_year_info(solar)
 
-                copy = price.copy()
-                # Let's add append to the end as long as its not long enough
-                while len(price.index.year.unique()) < max_years:
-                    copy_first_year = copy.index[0].year
-                    old_last_year = price.index[-1].year
-                    temp = copy.copy()
-                    add_years = old_last_year - copy_first_year + 1
-                    temp.index = temp.index + pd.DateOffset(years=add_years)
-                    price = pd.concat([price, temp])
+                if price_end_day < 365:
+                    price = price[~(price.index.year == price_end_year)]
+                    price_start_year, price_end_year, price_num_years = get_index_year_info(price)
 
-            # Now they should all be the same length so lets merge them into a dataframe
-            df = hydro.copy()
-            df = df.join(solar, how="left")
-            df = df.join(price, how="left")
-            df.fillna(0, inplace=True)
 
-            # Trim dataframe based on life expectancy
-            if len(df.index.year.unique()) > self.life_expectancy:
-                last_year = self.life_expectancy + df.index[0].year
-                df = df[df.index < pd.to_datetime(f"{last_year}")]
+                # Now they should all start at same year and be a "perfect" year(s) worth of data
+                # Let's make all of them the same number of years
+                max_years = self.life_expectancy
 
-            # Add all columns we will use here
-            df["Hydro Revenue ($)"] = df["Hydro Gen (MW)"] * df["Price ($/MW)"]
-            df["Solar Revenue ($)"] = df["Solar Gen (MW)"] * df["Price ($/MW)"]
+                if solar_num_years < max_years:
 
-            df["PTC Incentives ($)"] = df["Solar Gen (MW)"] * self.incentive_PTC_cents_per_kWh * 1000 / 100
-            df["PTC Incentives ($)"].iloc[self.PTC_num_years * 8760 + 1:] = 0
+                    copy = solar.copy()
+                    # Let's add append to the end as long as its not long enough
+                    while len(solar.index.year.unique()) < max_years:
+                        copy_first_year = copy.index[0].year
+                        old_last_year = solar.index[-1].year
+                        temp = copy.copy()
+                        add_years = old_last_year - copy_first_year + 1
+                        temp.index = temp.index + pd.DateOffset(years=add_years)
+                        solar = pd.concat([solar, temp])
 
-            df["Capex High ($)"] = 0
-            df.loc[df.index[0], "Capex High ($)"] = self.capex_high * self.pv_size_MW
+                if price_num_years < max_years:
 
-            df["Capex Baseline ($)"] = 0
-            df.loc[df.index[0], "Capex Baseline ($)"] = self.capex_baseline * self.pv_size_MW
+                    copy = price.copy()
+                    # Let's add append to the end as long as its not long enough
+                    while len(price.index.year.unique()) < max_years:
+                        copy_first_year = copy.index[0].year
+                        old_last_year = price.index[-1].year
+                        temp = copy.copy()
+                        add_years = old_last_year - copy_first_year + 1
+                        temp.index = temp.index + pd.DateOffset(years=add_years)
+                        price = pd.concat([price, temp])
 
-            df["ITC Incentives ($)"] = 0
-            df.loc[df.index[0], "ITC Incentives ($)"] = self.capex_baseline * self.incentive_ITC_percent / 100
+                # Now they should all be the same length so lets merge them into a dataframe
+                df = solar.copy()
+                df = df.join(price, how="left")
+                df.fillna(0, inplace=True)
 
-            df["Capex Low ($)"] = 0
-            df.loc[df.index[0], "Capex Low ($)"] = self.capex_low * self.pv_size_MW
+                # Trim dataframe based on life expectancy
+                if len(df.index.year.unique()) > self.life_expectancy:
+                    last_year = self.life_expectancy + df.index[0].year
+                    df = df[df.index < pd.to_datetime(f"{last_year}")]
 
-            df["Opex High ($)"] = self.opex_high / (365 * 24) * self.pv_size_MW
-            df["Opex Baseline ($)"] = self.opex_baseline / (365 * 24) * self.pv_size_MW
-            df["Opex Low ($)"] = self.opex_low / (365 * 24) * self.pv_size_MW
 
-        else:
-            print("Make sure data starts Jan, 1st")
+                # Add all columns we will use here
+                df["Solar Revenue ($)"] = df["Solar Generation (MW)"] * df["Price ($/MW)"]
 
-        return df
+                df["PTC Incentives ($)"] = df["Solar Generation (MW)"] * self.PTC_cents_per_kWh * 1000 / 100
+                # df["PTC Incentives ($)"].iloc[self.PTC_number_years * 8760 + 1:] = 0
+                df.iloc[self.PTC_number_years * 8760 + 1:, len(df.columns)-1] = 0
+
+                df["CAPEX High ($)"] = 0
+                df.loc[df.index[0], "CAPEX High ($)"] = self.CAPEX_high
+
+                df["CAPEX Baseline ($)"] = 0
+                df.loc[df.index[0], "CAPEX Baseline ($)"] = self.CAPEX_baseline
+
+                df["CAPEX Low ($)"] = 0
+                df.loc[df.index[0], "CAPEX Low ($)"] = self.CAPEX_low
+
+                df["ITC Incentives ($)"] = 0
+                df.loc[df.index[0], "ITC Incentives ($)"] = self.CAPEX_baseline * self.ITC_percent / 100
+
+                df["OPEX High ($)"] = self.OPEX_high / (365 * 24) 
+                df["OPEX Baseline ($)"] = self.OPEX_baseline / (365 * 24) 
+                df["OPEX Low ($)"] = self.OPEX_low / (365 * 24) 
+
+            else:
+                print("Make sure data starts Jan, 1st")
+
+            return df
+        except:
+            return "Error loading data, check format against example provided"
+
 
     #################################
     # Setter methods
@@ -412,23 +322,14 @@ class AquaPV(object):
         """
         self.name = name
 
-    def set_hydro_data(self, file):
-
-        self.hydro = import_hydro_data(file)
-        self.hydro_file = file
-
-        # If we have all the data, construct the dataframe
-        if self.solar is not None and self.price is not None:
-            self.get_AquaPV_dataframe()
-
     def set_solar_data(self, file):
 
         self.solar = import_solar_data(file)
         self.solar_file = file
 
         # If we have all the data, construct the dataframe
-        if self.hydro is not None and self.price is not None:
-            self.get_AquaPV_dataframe()
+        if self.price is not None:
+            self.data = self.get_AquaPV_dataframe()
 
     def set_price_data(self, file):
 
@@ -436,17 +337,11 @@ class AquaPV(object):
         self.price_file = file
 
         # If we have all the data, construct the dataframe
-        if self.hydro is not None and self.solar is not None:
-            self.get_AquaPV_dataframe()
+        if self.solar is not None:
+            self.data = self.get_AquaPV_dataframe()
 
-    def set_PV_size_MW(self, PV_size):
 
-        self.pv_size_MW = PV_size
-
-        if self.data is not None:
-            self.get_AquaPV_dataframe()
-
-    def set_capex(self, low=None, baseline=None, high=None):
+    def set_(self, low=None, baseline=None, high=None):
 
         if low is not None:
             self.capex_low = low
@@ -519,7 +414,13 @@ class AquaPV(object):
 
         # Only update if we have all needed data
         if self.data is not None:
-            self.get_AquaPV_dataframe()
+            self.data = self.get_AquaPV_dataframe()
+
+
+    def set_annual_discount_rate(self, annual_discount_rate):
+
+        # Input will be value 0 to 100 but needs to be decimal value
+        self.annual_discount_rate = annual_discount_rate / 100
 
     #################################
     # Getter methods
@@ -535,17 +436,16 @@ class AquaPV(object):
     #################################
     def get_payback_period(self):
 
-        capex_list = ["Capex Low", "Capex Baseline", "Capex High"]
-        opex_list = ["Opex Low", "Opex Baseline", "Opex High"]
-
         # Construct needed dataframe, already have the incentives
         df = self.data.copy()
 
-        # Start dict for results
-        results = dict()
+        # Dataframe for the results
+        results = pd.DataFrame(index=[x for x in range(1, 10)], 
+                               columns=["CAPEX", "OPEX", "ITC", "PTC", "None"])
 
-        for capex in capex_list:
-            for opex in opex_list:
+        i = 0;
+        for capex in ["CAPEX Low", "CAPEX Baseline", "CAPEX High"]:
+            for opex in ["OPEX Low", "OPEX Baseline", "OPEX High"]:
 
                 # Need to add capex and opex
                 df["Capex + Opex ($)"] = df[f"{capex} ($)"] + df[f"{opex} ($)"]
@@ -564,8 +464,8 @@ class AquaPV(object):
                 PTC_payback_date = (df["Solar Revenue ($)"].cumsum() > df["Total Cost PTC ($)"].cumsum()).idxmax()
                 PTC_payback_num_days = int(str(PTC_payback_date - df.index[0]).split(" ")[0])
 
+                # If no payback reached
                 if payback_num_days == 0:
-                    payback_num_days = np.nan
                     years_frac = np.nan
                     years = np.nan
                     days = np.nan
@@ -574,8 +474,8 @@ class AquaPV(object):
                     years = int(np.floor(years_frac))
                     days = payback_num_days % 365
 
+                # If no payback reached
                 if ITC_payback_num_days == 0:
-                    ITC_payback_num_days = np.nan
                     ITC_years_frac = np.nan
                     ITC_years = np.nan
                     ITC_days = np.nan
@@ -584,9 +484,9 @@ class AquaPV(object):
                     ITC_years_frac = ITC_payback_num_days / 365
                     ITC_years = int(np.floor(ITC_years_frac))
                     ITC_days = ITC_payback_num_days % 365
-
+                
+                # If no payback reached
                 if PTC_payback_num_days == 0:
-                    PTC_payback_num_days = np.nan
                     PTC_years_frac = np.nan
                     PTC_years = np.nan
                     PTC_days = np.nan
@@ -596,23 +496,29 @@ class AquaPV(object):
                     PTC_years = int(np.floor(PTC_years_frac))
                     PTC_days = PTC_payback_num_days % 365
 
-                results.update({f"{capex}, {opex}": {"ITC": ITC_years_frac,
-                                                     "PTC": PTC_years_frac,
-                                                     "None": years_frac}})
+                results.iloc[i, :] = [capex.split(" ")[1], 
+                                      opex.split(" ")[1], 
+                                      ITC_years_frac, 
+                                      PTC_years_frac, 
+                                      years_frac]
+                i += 1
 
         return results
 
     def get_LCOE(self):
 
         # Let's now do that for energy, it's the NPV equation with energy instead of cost
-        yearly_energy = self.data["Solar Gen (MW)"].groupby(self.data.index.year).sum()
+        yearly_energy = self.data["Solar Generation (MW)"].groupby(self.data.index.year).sum()
         yearly_energy = npf.npv(self.annual_discount_rate, yearly_energy)
 
-        LCOE = dict()
+        # Dataframe for the results
+        results = pd.DataFrame(index=[x for x in range(1, 10)], 
+                               columns=["CAPEX", "OPEX", "ITC", "PTC", "None"])
 
+        i = 0;
         # Now lets go over each cost scenario
-        for capex in ["Capex Low", "Capex Baseline", "Capex High"]:
-            for opex in ["Opex Low", "Opex Baseline", "Opex High"]:
+        for capex in ["CAPEX Low", "CAPEX Baseline", "CAPEX High"]:
+            for opex in ["OPEX Low", "OPEX Baseline", "OPEX High"]:
                 # Need to find the cost
                 yearly_cost = self.data[f"{capex} ($)"] + self.data[f"{opex} ($)"]
 
@@ -631,18 +537,25 @@ class AquaPV(object):
                 PTC_lcoe = PTC_cost / yearly_energy
                 lcoe = cost / yearly_energy
 
-                LCOE.update({f"{capex}, {opex}": {"ITC": ITC_lcoe,
-                                                  "PTC": PTC_lcoe,
-                                                  "None": lcoe}})
+                results.iloc[i, :] = [capex.split(" ")[1], 
+                                      opex.split(" ")[1], 
+                                      ITC_lcoe, 
+                                      PTC_lcoe, 
+                                      lcoe]
+                i += 1
 
-        return LCOE
+        return results
 
     def get_NPV(self):
 
-        NPV = dict()
+        # Dataframe for the results
+        results = pd.DataFrame(index=[x for x in range(1, 10)], 
+                               columns=["CAPEX", "OPEX", "ITC", "PTC", "None"])
 
-        for capex in ["Capex Low", "Capex Baseline", "Capex High"]:
-            for opex in ["Opex Low", "Opex Baseline", "Opex High"]:
+        i = 0;
+
+        for capex in ["CAPEX Low", "CAPEX Baseline", "CAPEX High"]:
+            for opex in ["OPEX Low", "OPEX Baseline", "OPEX High"]:
                 # Revenue - Cost + Incentives
                 yearly_cash_flow = self.data["Solar Revenue ($)"] - \
                                    self.data[f"{capex} ($)"] - \
@@ -659,18 +572,24 @@ class AquaPV(object):
                 ITC_npv = npf.npv(self.annual_discount_rate, ITC_yearly_cash_flow)
                 PTC_npv = npf.npv(self.annual_discount_rate, PTC_yearly_cash_flow)
 
-                NPV.update({f"{capex}, {opex}": {"ITC": ITC_npv,
-                                                 "PTC": PTC_npv,
-                                                 "None": npv}})
+                results.iloc[i, :] = [capex.split(" ")[1], 
+                                      opex.split(" ")[1], 
+                                      ITC_npv, 
+                                      PTC_npv, 
+                                      npv]
+                i += 1
 
-        return NPV
+        return results
 
     def get_ROI(self):
 
-        ROI = dict()
+        # Dataframe for the results
+        results = pd.DataFrame(index=[x for x in range(1, 10)], 
+                               columns=["CAPEX", "OPEX", "ITC", "PTC", "None"])
 
-        for capex in ["Capex Low", "Capex Baseline", "Capex High"]:
-            for opex in ["Opex Low", "Opex Baseline", "Opex High"]:
+        i = 0;
+        for capex in ["CAPEX Low", "CAPEX Baseline", "CAPEX High"]:
+            for opex in ["OPEX Low", "OPEX Baseline", "OPEX High"]:
 
                 # We will consider incentives revenue
                 revenue = self.data["Solar Revenue ($)"]
@@ -684,20 +603,24 @@ class AquaPV(object):
                 ITC_roi = (ITC_revenue.sum() - cost) / cost * 100
                 PTC_roi = (PTC_revenue.sum() - cost) / cost * 100
 
+                results.iloc[i, :] = [capex.split(" ")[1], 
+                                      opex.split(" ")[1], 
+                                      ITC_roi, 
+                                      PTC_roi, 
+                                      roi]
+                i += 1
 
-                ROI.update({f"{capex}, {opex}": {"ITC": ITC_roi,
-                                                 "PTC": PTC_roi,
-                                                 "None": roi}})
-
-        return ROI
+        return results
 
     def get_IRR(self):
 
-        IRR = dict()
+        # Dataframe for the results
+        results = pd.DataFrame(index=[x for x in range(1, 10)], 
+                               columns=["CAPEX", "OPEX", "ITC", "PTC", "None"])
 
-        for capex in ["Capex Low", "Capex Baseline", "Capex High"]:
-            for opex in ["Opex Low", "Opex Baseline", "Opex High"]:
-
+        i = 0;
+        for capex in ["CAPEX Low", "CAPEX Baseline", "CAPEX High"]:
+            for opex in ["OPEX Low", "OPEX Baseline", "OPEX High"]:
                 revenue = self.data["Solar Revenue ($)"] - self.data[f"{capex} ($)"] - self.data[f"{opex} ($)"]
 
                 ITC_revenue = revenue + self.data["ITC Incentives ($)"]
@@ -707,15 +630,58 @@ class AquaPV(object):
                 ITC_irr = npf.irr(ITC_revenue.groupby(ITC_revenue.index.year).sum())
                 PTC_irr = npf.irr(PTC_revenue.groupby(PTC_revenue.index.year).sum())
 
-                IRR.update({f"{capex}, {opex}": {"ITC": ITC_irr,
-                                                 "PTC": PTC_irr,
-                                                 "None": irr}})
+                results.iloc[i, :] = [capex.split(" ")[1], 
+                                      opex.split(" ")[1], 
+                                      ITC_irr * 100, 
+                                      PTC_irr * 100, 
+                                      irr * 100]
+                i += 1
 
-        return IRR
+        return results
 
     #################################
     # Plotting functions
     #################################
+
+    def format_plot(self, fig, main_title='', x_title='', y_title='', height=450, margin=None, legend_location="top-right", legend_title=""):
+
+        if margin is None:
+            margin = dict(t=75, b=75, l=75, r=25)
+
+        fig.update_xaxes(title=x_title, showgrid=True,
+                         title_font=dict(color="black", size=20),
+                         tickfont=dict(size=16, color='black')
+                         )
+        fig.update_yaxes(title=y_title, showgrid=True, title_font=dict(color="black", size=20),
+                         tickfont=dict(size=16, color='black'))
+        fig.update_layout(title=dict(text=main_title,
+                                     font=dict(size=24, color='black'),
+                                     x=0.5,
+                                     xanchor='center'
+                                     ),
+                          height=height,
+                          margin=margin,
+                          paper_bgcolor='rgba(251, 252, 252, 1)',
+                          plot_bgcolor='rgba(251, 252, 252, 1)',
+                          legend_title=legend_title,
+                          legend=dict(title_font_color="black",
+                                      title_font_size=14,
+                                      font=dict(color="black", size=12),
+                                      bgcolor='rgba(255, 255, 255, 0.8)',
+                                      bordercolor='rgba(50, 50, 50, 0.8)',
+                                      borderwidth=1,
+                                      ),
+                          )
+        if legend_location == "top-right":
+            fig.update_layout(legend=dict(xanchor='right',
+                                          x=0.99,
+                                          y=0.99))
+        elif legend_location == 'top-left':
+            fig.update_layout(legend=dict(x=0.01,
+                                          y=0.99))
+
+        return fig
+
 
     def plot_settings(self):
         right_legend = dict(font_size=14, yanchor="top", y=0.99, xanchor="right", x=0.99, title=None,
@@ -768,34 +734,38 @@ class AquaPV(object):
         fig.update_yaxes(title="Cost ($/MW)")
         return fig
 
-    def plot_imported_data(self, high_resolution=False, height=450, skip_freq=10):
-        right_legend, left_legend, margin, axis_font_size = self.plot_settings()
+    def plot_imported_data(self, high_resolution=False, height=400, skip_freq=10):
 
         df = self.hydro.copy()
+        
         df = pd.concat([df, self.solar])
         df = pd.concat([df, self.price])
 
         if high_resolution is True:
-            fig = px.line(df)
+            fig = px.line(df, template='plotly_white')
         else:
             fig = px.line(df[::skip_freq])
 
-        fig.update_layout(title=dict(text='Imported Hydro, Solar, and Price Data', x=0.5, font=dict(size=24)))
-        fig.update_layout(height=height, legend=right_legend, margin=margin, font=dict(size=axis_font_size))
-        fig.update_yaxes(title="")
+        fig = self.format_plot(fig,
+                               main_title="Imported Data",
+                               x_title='Date',
+                               y_title='Values',
+                               height=350,
+                               margin=None,
+                               legend_location="top-left")
+
         return fig
 
-    def plot_merged_data(self, high_resolution=False, height=450, skip_freq=10):
-        right_legend, left_legend, margin, axis_font_size = self.plot_settings()
+    def plot_merged_data(self, high_resolution=False, height=350, skip_freq=30):
+        
 
         if high_resolution is True:
-            fig = px.line(self.data[["Hydro Gen (MW)", "Solar Gen (MW)", "Price ($/MW)"]])
+            fig = px.line(self.data[["Solar Generation (MW)", "Price ($/MW)"]])
         else:
-            fig = px.line(self.data[["Hydro Gen (MW)", "Solar Gen (MW)", "Price ($/MW)"]][::skip_freq])
+            fig = px.line(self.data[["Solar Generation (MW)", "Price ($/MW)"]][::skip_freq])
 
-        fig.update_layout(title=dict(text='Merged & Extrapolated Hydro, Solar, and Price Data', x=0.5, font=dict(size=24)))
-        fig.update_layout(height=height, legend=right_legend, margin=margin, font=dict(size=axis_font_size))
-        fig.update_yaxes(title="")
+        # fig = self.format_plot(fig, main_title='Merged & Extrapolated Hydro, Solar, and Price Data', x_title='Date', y_title='Values', height=350, margin=None, legend_location="top-right")
+
         return fig
 
     def plot_revenue(self, high_resolution=False, skip_freq=10):
@@ -809,10 +779,10 @@ class AquaPV(object):
                                      'ITC Incentives ($)',
                                      'PTC Incentives ($)']].cumsum()[0::skip_freq])
 
-        fig.update_layout(title=dict(text='Hydro, Solar, and Incentive Revenue', x=0.5, font=dict(size=25)))
-        fig.update_layout(height=300, legend=left_legend, margin=margin, font=dict(size=axis_font_size))
-        fig.update_yaxes(rangemode='tozero')
-        fig.update_layout(yaxis_title="Revenue ($)")
+        fig = self.format_plot(fig, main_title='Revenue ($)', x_title='Date',
+                               y_title='Revenue ($)', height=350, margin=None, legend_location="top-left")
+
+
         return fig
 
     def plot_payback_period(self):
@@ -837,11 +807,10 @@ class AquaPV(object):
                           "Baseline Capex/Opex ($)",
                           "Low Capex/Opex ($)"
                           ]].cumsum()[::24 * 7])
-        fig.update_layout(title=dict(text='Payback Period', x=0.5, font=dict(size=25)))
-        fig.update_layout(height=300, legend=left_legend, margin=margin, font=dict(size=axis_font_size))
-        fig.update_layout(yaxis_title="Revenue & Cost ($)", xaxis_title='Years')
-        fig.update_yaxes(rangemode='tozero')
-        fig.update_xaxes(zeroline=False)
+
+        fig = self.format_plot(fig, main_title='Revenue, Cost, Payback Period', x_title='Years',
+                               y_title='Revenue & Cost ($)', height=350, margin=None, legend_location="top-right")
+
         return fig
 
     def payback_period_table(self):
@@ -871,7 +840,7 @@ class AquaPV(object):
         df[["None", "ITC", "PTC"]] = df[["None", "ITC", "PTC"]].applymap("{0:,.1f}".format)
 
         table = ff.create_table(df)
-        table.update_layout(title=dict(text='Payback Period (years)', x=0.5, font=dict(size=25)), margin=dict(t=40))
+        table.update_layout(title=dict(text='Payback Period (years)', x=0.5, xanchor='center', font=dict(size=25)), margin=dict(t=40))
 
         for i in range(len(table.layout.annotations)):
             table.layout.annotations[i].font.size = 15
@@ -905,7 +874,7 @@ class AquaPV(object):
         df[["None", "ITC", "PTC"]] = df[["None", "ITC", "PTC"]].applymap("{0:,.1f}".format)
 
         table = ff.create_table(df)
-        table.update_layout(title=dict(text='Levelized Cost of Energy ($/MW)', x=0.5, font=dict(size=25)), margin=dict(t=40))
+        table.update_layout(title=dict(text='Levelized Cost of Energy ($/MW)', x=0.5, xanchor='center', font=dict(size=25)), margin=dict(t=40))
 
         for i in range(len(table.layout.annotations)):
             table.layout.annotations[i].font.size = 16
@@ -940,7 +909,7 @@ class AquaPV(object):
 
 
         table = ff.create_table(df)
-        table.update_layout(title=dict(text='Net Present Value ($)', x=0.5, font=dict(size=25)), margin=dict(t=40))
+        table.update_layout(title=dict(text='Net Present Value ($)', x=0.5, xanchor='center', font=dict(size=25)), margin=dict(t=40))
 
         for i in range(len(table.layout.annotations)):
             table.layout.annotations[i].font.size = 16
@@ -974,7 +943,7 @@ class AquaPV(object):
         df[["None", "ITC", "PTC"]] = df[["None", "ITC", "PTC"]].applymap("{0:,.1f}".format)
 
         table = ff.create_table(df)
-        table.update_layout(title=dict(text='Return on Investment (%)', x=0.5, font=dict(size=25)), margin=dict(t=40))
+        table.update_layout(title=dict(text='Return on Investment (%)', x=0.5, xanchor='center', font=dict(size=25)), margin=dict(t=40))
 
         for i in range(len(table.layout.annotations)):
             table.layout.annotations[i].font.size = 16
@@ -1015,34 +984,28 @@ class AquaPV(object):
         return table
 
     def __str__(self):
-        # TODO finish this string to print
+
         out = "*" * 50 + "\n"
         out += self.name + ":\n"
         out += "*" * 50 + "\n"
 
-        out += f"Data Files:\n"
-        out += f"\tHydro Gen: {self.hydro_file}\n"
-        out += f"\tSolar Gen: {self.solar_file}\n"
-        out += f"\tPrice: {self.price_file}\n\n"
+        out += f"Capital expense ($):\n"
+        out += f"\tHigh: ${self.CAPEX_high:,.0f}\n"
+        out += f"\tBaseline: ${self.CAPEX_baseline:,.0f}\n"
+        out += f"\tLow: ${self.CAPEX_low:,.0f}\n\n"
 
-        out += f"Capital expense:\n"
-        out += f"\tHigh: ${self.capex_high:,.0f}\n"
-        out += f"\tBaseline: ${self.capex_baseline:,.0f}\n"
-        out += f"\tLow: ${self.capex_low:,.0f}\n\n"
-
-        out += f"Operational expense:\n"
-        out += f"\tHigh: ${self.opex_high:,.0f}\n"
-        out += f"\tBaseline: ${self.opex_baseline:,.0f}\n"
-        out += f"\tLow: ${self.opex_low:,.0f}\n\n"
+        out += f"Operational expense ($/year):\n"
+        out += f"\tHigh: {self.OPEX_high:,.0f}\n"
+        out += f"\tBaseline: {self.OPEX_baseline:,.0f}\n"
+        out += f"\tLow: {self.OPEX_low:,.0f}\n\n"
 
         out += f"Tax incentives:\n"
-        out += f"\tITC: {self.incentive_ITC_percent}%\n"
-        out += f"\tPTC: {self.incentive_PTC_cents_per_kWh} cents/kW\n\n"
+        out += f"\tITC: {self.ITC_percent}%\n"
+        out += f"\tPTC: {self.PTC_cents_per_kWh} cents/kW\n\n"
 
         out += f"Other:\n"
         out += f"\tAnnual discount rate: {self.annual_discount_rate}\n"
         out += f"\tProject lifetime: {self.life_expectancy} years\n"
-
 
         out += "*" * 50 + "\n\n"
         return out
