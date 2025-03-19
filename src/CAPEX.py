@@ -6,7 +6,7 @@ import sys
 #######################################################
 # Get the CAPEX cost
 # This is the main function call that will call all
-# the above functions and return the CAPEX
+# the functions and return the CAPEX
 #######################################################
 
 def get_CAPEX(
@@ -21,10 +21,11 @@ def get_CAPEX(
         sales_tax_percent=6,
         substation_upgrade_YES_or_NO="NO",
         grid_connection_voltage_kV=167,
+        commercial_operation_date=2024, 
         ):
 
     
-    # Get the user input, Excel file will be the default
+    # Get the user input system parameters
     user_input = import_user_input(
         project_size_MW_DC,
         DC_AC_conversion,
@@ -53,6 +54,21 @@ def get_CAPEX(
     CAPEX.loc["Racking"]= racking_cost(heuristics, user_input)
     CAPEX.loc["Install Labor"] = install_labor_cost(heuristics, user_input)
     CAPEX.loc["Solar Panels"] = solar_panel_cost(user_input)
+
+    # Now we can adjust based of COD, commercial operation date
+    if commercial_operation_date > 2024:
+        
+        # Use this number to adjust our values
+        number_of_years = commercial_operation_date - 2024
+
+        # Labor increase of 4% per year but decrese 2% per year from industry advancement for a total of 2% per year
+        CAPEX.loc["Install Labor", ["Cost $/W", "Total Cost"]] = compound_annual_growth(CAPEX.loc["Install Labor"], rate=2, years=number_of_years)
+
+        # Inflation increase of 2.5% per year. Racking and A&M will reduce by 4% per year through industry advancement for -1.5% per year
+        CAPEX.loc["DC EBOS", ["Cost $/W", "Total Cost"]] = compound_annual_growth(CAPEX.loc["DC EBOS"], rate=2.5, years=number_of_years)
+        CAPEX.loc["Racking", ["Cost $/W", "Total Cost"]] = compound_annual_growth(CAPEX.loc["Racking"], rate=-1.5, years=number_of_years)
+        CAPEX.loc["Anchoring and Mooring", ["Cost $/W", "Total Cost"]] = compound_annual_growth(CAPEX.loc["Anchoring and Mooring"], rate=-1.5, years=number_of_years)
+        
     
     # We don't want general construction here. Create list to insert into CAPEX [$/W, TotalCost, "Soft Cost"]
     # Update to metric: op = system_subtotal * [-0.03329 ln(Size_ac) + 0.24022]
@@ -75,6 +91,15 @@ def get_CAPEX(
 
     return CAPEX
 
+
+# New function for compunding increase over years
+def compound_annual_growth(amount, rate, years):
+    amount_per_watt = amount["Cost $/W"]
+    total_amount = amount["Total Cost"]
+    for _ in range(years):
+        amount_per_watt *= (1 + rate/100)
+        total_amount *= (1 + rate/100)
+    return amount_per_watt, total_amount
 
 #######################################################
 # Import User Input and Heuristics

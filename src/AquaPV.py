@@ -1,3 +1,5 @@
+# Copyright 2024, Battelle Energy Alliance, LLC, ALL RIGHTS RESERVED
+
 __author__ = "Tyler Phillips"
 __copyright__ = ""
 __credits__ = ["Juan Gallego Calderon, Tanveer Hussain, Mucun Sun"]
