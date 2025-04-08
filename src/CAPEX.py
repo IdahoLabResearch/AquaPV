@@ -1,3 +1,5 @@
+# Copyright 2024, Battelle Energy Alliance, LLC, ALL RIGHTS RESERVED
+
 import pandas as pd
 import numpy as np
 import sys
@@ -10,19 +12,19 @@ import sys
 #######################################################
 
 def get_CAPEX(
-        heuristics_file="src/CAPEX_HEURISTICS.xlsx",
-        project_size_MW_DC=1,
-        DC_AC_conversion=1.3,
-        tilt=12,
-        module_wattage_DC=600,
-        module_price_watt_DC=.31,
-        inverter_price_watt_DC=.04,
-        average_distance_to_shore_ft=100,
-        sales_tax_percent=6,
-        substation_upgrade_YES_or_NO="NO",
-        grid_connection_voltage_kV=167,
-        commercial_operation_date=2024, 
-        ):
+        heuristics_file:str = "src/CAPEX_HEURISTICS.xlsx",
+        project_size_MW_DC:float = 1,
+        DC_AC_conversion:float = 1.3,
+        tilt:int = 12,
+        module_wattage_DC:int = 600,
+        module_price_watt_DC:float = 0.31,
+        inverter_price_watt_DC:float = 0.04,
+        average_distance_to_shore_ft:float = 100,
+        sales_tax_percent:float = 6,
+        substation_upgrade_YES_or_NO:str = "NO",
+        grid_connection_voltage_kV:float = 167,
+        commercial_operation_date:int = 2024, 
+        ) -> pd.DataFrame:
 
     
     # Get the user input system parameters
@@ -55,7 +57,7 @@ def get_CAPEX(
     CAPEX.loc["Install Labor"] = install_labor_cost(heuristics, user_input)
     CAPEX.loc["Solar Panels"] = solar_panel_cost(user_input)
 
-    # Now we can adjust based of COD, commercial operation date
+    # Now we can adjust based of COD, commercial operation date based on NORIA data
     if commercial_operation_date > 2024:
         
         # Use this number to adjust our values
