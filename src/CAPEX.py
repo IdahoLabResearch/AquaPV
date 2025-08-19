@@ -59,7 +59,6 @@ def get_CAPEX(
 
     # Now we can adjust based of COD, commercial operation date based on NORIA data
     if commercial_operation_date > 2024:
-        
         # Use this number to adjust our values
         number_of_years = commercial_operation_date - 2024
 
@@ -80,9 +79,6 @@ def get_CAPEX(
     CAPEX.loc["Overhead and Profit"] = [overhead_profit_per_W_ac, total_overhead_profit, "Soft Cost"]
     
     CAPEX = CAPEX.sort_values(by="Total Cost", ascending=False)
-
-    # Currently the $/W is in ac, we want it in dc
-    CAPEX["Cost $/W"] = CAPEX["Cost $/W"] / DC_AC_conversion
     CAPEX = CAPEX.rename(columns={"Cost $/W": "Cost $/W_dc"})
     
     project_total = list(CAPEX.iloc[:, 0:2].sum().values)
@@ -358,7 +354,6 @@ def solar_panel_cost(user_input):
     
     cost = user_input["Module Price ($/W_DC)"]
     cost = cost + (cost * user_input["Sales Tax (%)"])
-    
     return cost, cost * user_input["Project Size (W_DC)"], "Hard Cost"
 
 
