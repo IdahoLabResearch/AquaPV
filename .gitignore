@@ -1,8 +1,3 @@
 __pycache__
 .idea
-
-#.*
-#docs/
-
-pyproject.toml
-
+.DS_Store
